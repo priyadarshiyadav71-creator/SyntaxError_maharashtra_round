@@ -1,0 +1,19 @@
+
+# Python
+ml-service/venv/
+ml-service/__pycache__/
+ml-service/*.pyc
+
+# ML generated files
+ml-service/models/*.pkl
+
+# Environment
+.env
+.env.local
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

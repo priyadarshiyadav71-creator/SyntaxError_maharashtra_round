@@ -1,0 +1,9 @@
+question,student_answer,correct_answer,misconception
+"What does range(5) produce?","1,2,3,4,5","0,1,2,3,4","range_boundary"
+"What does range(3) produce?","1,2,3","0,1,2","range_boundary"
+"What does == mean in Python?","It assigns a value","It checks equality","assignment_equality"
+"What does = mean in Python?","It checks whether two values are equal","It assigns a value","assignment_equality"
+"What does return do in a function?","It prints the result","It sends a value back from a function","return_misunderstanding"
+"What does return do?","It displays something on screen","It sends a value back from a function","return_misunderstanding"
+"What is the first index of a Python list?","1","0","indexing"
+"What is the last index of a list of 5 elements?","5","4","indexing"
