@@ -45,7 +45,7 @@ instead of returning an unrelated category.
 
 
 ## Project structure
-
+```
 .
 ├── client/                  # React, Vite, and Tailwind CSS frontend
 │   └── src/
