@@ -69,6 +69,7 @@ function Step({ n, title, children, last }) {
 function App() {
   const [answer, setAnswer] = useState("");
   const [editorMode, setEditorMode] = useState("text");
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [submittedAnswer, setSubmittedAnswer] = useState("");
   const [submittedMode, setSubmittedMode] = useState("text");
   const [result, setResult] = useState(null);
@@ -79,32 +80,24 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submitAnswer() {
-
     const isCodeSubmission = editorMode === "code";
     if (isSubmitting) return;
     if (!answer.trim()) return;
-    if (!isCodeSubmission && !question.trim()) return;
+    if (!question.trim()) return;
     const submitted = isCodeSubmission ? answer : answer.trim();
-
-
 
     setIsSubmitting(true);
     setError("");
     setFeedback("");
 
     try {
+      const payload = { question: question.trim(), answer: submitted };
 
-      const payload = isCodeSubmission
-        ? { question: submitted, answer: submitted }
-        : { question: question.trim(), answer: submitted };
-
-
-      const response = await axios.post("http://localhost:8000/diagnose", {
-        payload
-      });
+      const response = await axios.post("http://localhost:8000/diagnose", payload);
 
       const data = response.data;
 
+      setSubmittedQuestion(question.trim());
       setSubmittedAnswer(submitted);
       setSubmittedMode(editorMode);
 
@@ -222,8 +215,26 @@ function App() {
                 </>
               ) : (
                 <>
+                  <label htmlFor="code-question" className="mt-6 block text-lg font-semibold">
+                    Your question
+                  </label>
+                  <textarea
+                    id="code-question"
+                    rows={3}
+                    className="rl-input mt-3 resize-y"
+                    placeholder="Describe the coding task..."
+                    value={question}
+                    onChange={(e) => {
+                      setQuestion(e.target.value);
+                      setExpectedAnswer(null);
+                      setResult(null);
+                      setFeedback("");
+                      setError("");
+                    }}
+                  />
+
                   <label htmlFor="answer" className="mt-6 block text-lg font-semibold">
-                    Your code
+                    Your code answer
                   </label>
                   <textarea
                     id="answer"
@@ -249,7 +260,7 @@ function App() {
                 disabled={
                   isSubmitting ||
                   !answer.trim() ||
-                  (editorMode === "text" && !question.trim())
+                  !question.trim()
                 }
                 className="rl-btn mt-7"
               >
@@ -277,9 +288,28 @@ function App() {
                     {submittedMode === "code"
                       ? result.is_correct === true || result.correct === true
                         ? "Code is correct"
-                        : "Code reassessment"
+                        : result.is_correct === false || result.correct === false
+                          ? "Code needs revision"
+                          : result.misconception
+                            ? "Code reassessment"
+                            : "No confident match"
                       : "Response"}
                   </h3>
+
+                  {result.message && (
+                    <p className="mt-4 leading-relaxed" style={{ color: "var(--ink-soft)" }}>
+                      {result.message}
+                    </p>
+                  )}
+
+                  {submittedMode === "code" && submittedQuestion && (
+                    <>
+                      <p className="mt-4 text-sm font-semibold" style={{ color: "var(--ink-soft)" }}>
+                        Question
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap">{submittedQuestion}</p>
+                    </>
+                  )}
 
                   {result.misconception && (
                     <>
@@ -312,22 +342,26 @@ function App() {
                     </>
                   )}
 
-                  <p className="mt-4 text-sm font-semibold" style={{ color: "var(--ink-soft)" }}>
-                    Confidence
-                  </p>
-                  <div className="mt-1 flex items-center gap-3">
-                    {confidence.pct !== null && (
-                      <div
-                        className="h-2 w-40 overflow-hidden rounded-full"
-                        style={{ background: "var(--line)" }}
-                        role="img"
-                        aria-label={`Confidence ${confidence.label}`}
-                      >
-                        <div className="h-full" style={{ width: `${confidence.pct}%`, background: "var(--ink)" }} />
+                  {result.misconception && (
+                    <>
+                      <p className="mt-4 text-sm font-semibold" style={{ color: "var(--ink-soft)" }}>
+                        Confidence
+                      </p>
+                      <div className="mt-1 flex items-center gap-3">
+                        {confidence.pct !== null && (
+                          <div
+                            className="h-2 w-40 overflow-hidden rounded-full"
+                            style={{ background: "var(--line)" }}
+                            role="img"
+                            aria-label={`Confidence ${confidence.label}`}
+                          >
+                            <div className="h-full" style={{ width: `${confidence.pct}%`, background: "var(--ink)" }} />
+                          </div>
+                        )}
+                        <span className="font-semibold">{confidence.label}</span>
                       </div>
-                    )}
-                    <span className="font-semibold">{confidence.label}</span>
-                  </div>
+                    </>
+                  )}
                 </div>
               )}
 

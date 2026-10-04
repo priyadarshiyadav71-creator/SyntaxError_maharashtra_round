@@ -5,12 +5,20 @@ from pydantic import BaseModel
 import joblib
 import pandas as pd
 from fastapi.middleware.cors import CORSMiddleware
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from interventions import INTERVENTIONS
 
 app = FastAPI()
+MIN_DIAGNOSIS_CONFIDENCE = 0.3
+MIN_QUESTION_SIMILARITY = 0.2
+QUESTION_SIMILARITY_MARGIN = 0.05
 SERVICE_DIR = Path(__file__).resolve().parent
 model = joblib.load(SERVICE_DIR / "models" / "misconception_model.pkl")
 training_data = pd.read_csv(SERVICE_DIR / "data" / "misconceptions.csv").fillna("")
+question_vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
+question_vectors = question_vectorizer.fit_transform(training_data["question"].astype(str))
+question_labels = training_data["misconception"].to_numpy()
 known_examples = {
     question.strip().casefold(): {
         "correct_answer": answer,
@@ -67,12 +75,55 @@ def diagnose(data: StudentResponse):
         }
 
     probabilities = model.predict_proba([text])[0]
-    prediction = (
-        known_example["misconception"]
-        if known_example
-        else model.predict([text])[0]
-    )
-    confidence = probabilities[list(model.classes_).index(prediction)]
+    best_index = int(probabilities.argmax())
+    best_prediction = model.classes_[best_index]
+    best_confidence = float(probabilities[best_index])
+
+    if known_example:
+        prediction = known_example["misconception"]
+        class_index = list(model.classes_).index(prediction) if prediction in model.classes_ else None
+        confidence = float(probabilities[class_index]) if class_index is not None else 1.0
+    else:
+        if best_confidence < MIN_DIAGNOSIS_CONFIDENCE:
+            return {
+                "misconception": None,
+                "confidence": round(best_confidence, 3),
+                "is_correct": None,
+                "correct_answer": None,
+                "intervention": None,
+                "message": (
+                    "I couldn't confidently match this question and answer to a "
+                    "known misconception. Try adding more detail or rephrasing it."
+                ),
+            }
+        prediction = best_prediction
+        confidence = best_confidence
+
+        question_similarities = cosine_similarity(
+            question_vectorizer.transform([data.question]),
+            question_vectors,
+        )[0]
+        closest_question_similarity = float(question_similarities.max())
+        matching_category_similarity = float(
+            question_similarities[question_labels == prediction].max()
+        )
+        if (
+            closest_question_similarity < MIN_QUESTION_SIMILARITY
+            or matching_category_similarity
+            < closest_question_similarity - QUESTION_SIMILARITY_MARGIN
+        ):
+            return {
+                "misconception": None,
+                "confidence": round(best_confidence, 3),
+                "is_correct": None,
+                "correct_answer": None,
+                "intervention": None,
+                "message": (
+                    "The predicted misconception does not match the topic of "
+                    "your question. Try rephrasing the question or adding more detail."
+                ),
+            }
+
     intervention = INTERVENTIONS.get(prediction)
 
     if intervention:
