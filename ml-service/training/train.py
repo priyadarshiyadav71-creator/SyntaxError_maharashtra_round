@@ -26,14 +26,24 @@ df["text"] = (
     " Student answer: " +
     df["student_answer"]
 )
+MIN_EXAMPLES = 10
+
+counts = df["misconception"].value_counts()
+rare = counts[counts < MIN_EXAMPLES]
+if not rare.empty:
+    print(f"Dropping {len(rare)} classes with fewer than {MIN_EXAMPLES} examples: {sorted(rare.index)}")
+    df = df[df["misconception"].isin(counts[counts >= MIN_EXAMPLES].index)].reset_index(drop=True)
 X = df["text"]
+
+
+    
 y = df["misconception"]
 
 # Report a holdout estimate, then fit the deployed model on every supplied example.
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
-    test_size=0.25,
+    test_size=0.2,
     random_state=42,
     stratify=y
 )

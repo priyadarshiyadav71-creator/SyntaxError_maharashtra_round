@@ -2,7 +2,6 @@ import { useState } from "react";
 import axios from "axios";
 import { styles } from "./utils/style.js";
 import { Navbar } from "./Components/Navbar.jsx";
-import { Hero } from "./Components/Hero.jsx";
 import { Footer } from "./Components/Footer.jsx";
 
 function normalizeAnswer(value) {
@@ -21,6 +20,30 @@ function formatConfidence(value) {
   return { label: String(value ?? "—"), pct: null };
 }
 
+function EditorModeTabs({ id, mode, onChange }) {
+  return (
+    <div className="mt-3 flex gap-2 border-b" style={{ borderColor: "var(--line)" }} role="tablist" aria-label={`${id} editor mode`}>
+      {["text", "code"].map((option) => (
+        <button
+          key={option}
+          id={`${id}-${option}-tab`}
+          type="button"
+          role="tab"
+          aria-selected={mode === option}
+          aria-controls={id}
+          onClick={() => onChange(option)}
+          className="border-b-2 px-3 py-2 text-sm font-semibold capitalize transition-colors"
+          style={{
+            borderColor: mode === option ? "var(--ink)" : "transparent",
+            color: mode === option ? "var(--ink)" : "var(--ink-soft)",
+          }}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function Step({ n, title, children, last }) {
   return (
@@ -45,7 +68,9 @@ function Step({ n, title, children, last }) {
 
 function App() {
   const [answer, setAnswer] = useState("");
+  const [editorMode, setEditorMode] = useState("text");
   const [submittedAnswer, setSubmittedAnswer] = useState("");
+  const [submittedMode, setSubmittedMode] = useState("text");
   const [result, setResult] = useState(null);
   const [question, setQuestion] = useState("");
   const [expectedAnswer, setExpectedAnswer] = useState(null);
@@ -54,42 +79,69 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submitAnswer() {
-    if (!question.trim() || !answer.trim() || isSubmitting) return;
-    const submitted = answer.trim();
+
+    const isCodeSubmission = editorMode === "code";
+    if (isSubmitting) return;
+    if (!answer.trim()) return;
+    if (!isCodeSubmission && !question.trim()) return;
+    const submitted = isCodeSubmission ? answer : answer.trim();
+
+
 
     setIsSubmitting(true);
     setError("");
     setFeedback("");
 
     try {
+
+      const payload = isCodeSubmission
+        ? { question: submitted, answer: submitted }
+        : { question: question.trim(), answer: submitted };
+
+
       const response = await axios.post("http://localhost:8000/diagnose", {
-        question: question.trim(),
-        answer: submitted,
+        payload
       });
 
       const data = response.data;
 
       setSubmittedAnswer(submitted);
-      setAnswer("");
+      setSubmittedMode(editorMode);
 
       const normalizedAnswer = normalizeAnswer(submitted);
       const normalizedExpected = expectedAnswer
         ? normalizeAnswer(expectedAnswer)
         : null;
-      const isCorrect =
-        data.is_correct === true ||
+      const isCorrect = isCodeSubmission
+        ? data.is_correct === true || data.correct === true
+        : data.is_correct === true ||
         data.correct === true ||
         (normalizedExpected && normalizedAnswer === normalizedExpected);
 
       if (isCorrect) {
-        setResult(null);
-        setFeedback("Your concepts are crystal clear!");
+        setAnswer("");
+        if (isCodeSubmission) {
+          setResult(data);
+          setFeedback(data.message ?? "The server confirmed your code is correct!");
+        } else {
+          setResult(null);
+          setFeedback("Your concepts are crystal clear!");
+        }
         return;
       }
 
       setResult(data);
-      setFeedback("");
+      if (isCodeSubmission) {
+        setFeedback(
+          data.is_correct === false || data.correct === false
+            ? "The server marked this code incorrect. Review the reassessment and try again."
+            : "The server could not confirm this code. Review the response and try again."
+        );
+        return;
+      }
 
+      setAnswer("");
+      setFeedback("");
       if (data.intervention?.question) {
         setQuestion(data.intervention.question);
         setExpectedAnswer(data.intervention.expected_answer ?? null);
@@ -114,10 +166,10 @@ function App() {
       <Navbar />
 
       <main>
-        <Hero />
+
 
         {/*  Question & response */}
-        <section id="practice" className="mx-auto max-w-6xl px-6 pb-24">
+        <section id="practice" className="mx-auto max-w-6xl mt-6 px-6 pb-24">
           <h2 className="rl-display text-3xl font-extrabold md:text-4xl">Practice a concept</h2>
           <p className="mt-3 max-w-xl" style={{ color: "var(--ink-soft)" }}>
             Type a question, then your answer. After each diagnosis, the
@@ -126,66 +178,86 @@ function App() {
 
           <div className="mt-10 grid items-start gap-8 lg:grid-cols-2">
             {/* input side */}
-            <div className="rl-card p-6 md:p-8">
-              <label htmlFor="question" className="block text-lg font-semibold">
-                Your question
-              </label>
-              <textarea
-                id="question"
-                rows={3}
-                className="rl-input mt-3 resize-y"
-                placeholder="Type your question here..."
-                value={question}
-                onChange={(e) => {
-                  setQuestion(e.target.value);
-                  setExpectedAnswer(null);
-                  setResult(null);
-                  setFeedback("");
-                  setError("");
-                }}
-              />
 
-              <label htmlFor="answer" className="mt-6 block text-lg font-semibold">
-                Your answer
-              </label>
-              <input
-                id="answer"
-                className="rl-input mt-3"
-                placeholder="Enter your answer..."
-                value={answer}
-                onChange={(e) => {
-                  setAnswer(e.target.value);
-                  setError("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitAnswer();
-                }}
-              />
+            {/* input side */}
+            <div className="rl-card p-6 md:p-8">
+              <EditorModeTabs id="editor" mode={editorMode} onChange={setEditorMode} />
+
+              {editorMode === "text" ? (
+                <>
+                  <label htmlFor="question" className="mt-6 block text-lg font-semibold">
+                    Your question
+                  </label>
+                  <textarea
+                    id="question"
+                    rows={3}
+                    className="rl-input mt-3 resize-y"
+                    placeholder="Type the question..."
+                    value={question}
+                    onChange={(e) => {
+                      setQuestion(e.target.value);
+                      setExpectedAnswer(null);
+                      setResult(null);
+                      setFeedback("");
+                      setError("");
+                    }}
+                  />
+
+                  <label htmlFor="answer" className="mt-6 block text-lg font-semibold">
+                    Your answer
+                  </label>
+                  <input
+                    id="answer"
+                    className="rl-input mt-3"
+                    placeholder="Enter your answer..."
+                    value={answer}
+                    onChange={(e) => {
+                      setAnswer(e.target.value);
+                      setError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitAnswer();
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <label htmlFor="answer" className="mt-6 block text-lg font-semibold">
+                    Your code
+                  </label>
+                  <textarea
+                    id="answer"
+                    rows={10}
+                    className="rl-input mt-3 resize-y font-mono text-sm"
+                    placeholder="Write or paste your code..."
+                    value={answer}
+                    onChange={(e) => {
+                      setAnswer(e.target.value);
+                      setResult(null);
+                      setFeedback("");
+                      setError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submitAnswer();
+                    }}
+                  />
+                </>
+              )}
 
               <button
                 onClick={submitAnswer}
-                disabled={isSubmitting || !question.trim() || !answer.trim()}
+                disabled={
+                  isSubmitting ||
+                  !answer.trim() ||
+                  (editorMode === "text" && !question.trim())
+                }
                 className="rl-btn mt-7"
               >
-                {isSubmitting ? "Sending..." : "Submit Answer"}
+                {isSubmitting ? "Sending..." : editorMode === "code" ? "Submit Code" : "Submit Answer"}
               </button>
 
-              {feedback && (
-                <p className="mt-6 text-lg font-semibold" style={{ color: "var(--good)" }} role="status">
-                  {feedback}
-                </p>
-              )}
-
-              {error && (
-                <p
-                  className="mt-6 rounded-lg border p-3 text-sm"
-                  style={{ color: "var(--bad)", borderColor: "var(--bad)", background: "#fdf0f2" }}
-                  role="alert"
-                >
-                  {error}
-                </p>
-              )}
             </div>
+
 
             {/* response  */}
             <div className="space-y-6" aria-live="polite">
@@ -201,21 +273,33 @@ function App() {
 
               {result && (
                 <div className="rl-card p-6 md:p-8">
-                  <h3 className="rl-display text-2xl font-bold">Response</h3>
+                  <h3 className="rl-display text-2xl font-bold">
+                    {submittedMode === "code"
+                      ? result.is_correct === true || result.correct === true
+                        ? "Code is correct"
+                        : "Code reassessment"
+                      : "Response"}
+                  </h3>
 
-                  <p className="mt-4 text-sm font-semibold" style={{ color: "var(--bad)" }}>
-                    Misconception
-                  </p>
-                  <p className="mt-1">
-                    <span className="rl-marker">{result.misconception}</span>
-                  </p>
+                  {result.misconception && (
+                    <>
+                      <p className="mt-4 text-sm font-semibold" style={{ color: "var(--bad)" }}>
+                        Misconception
+                      </p>
+                      <p className="mt-1">
+                        <span className="rl-marker">{result.misconception}</span>
+                      </p>
+                    </>
+                  )}
 
                   {submittedAnswer && (
                     <>
                       <p className="mt-4 text-sm font-semibold" style={{ color: "var(--ink-soft)" }}>
-                        Your answer
+                        {submittedMode === "code" ? "Submitted code" : "Your answer"}
                       </p>
-                      <p className="mt-1">{submittedAnswer}</p>
+                      <pre className={`mt-1 whitespace-pre-wrap break-words ${submittedMode === "code" ? "font-mono text-sm" : "font-sans"}`}>
+                        {submittedAnswer}
+                      </pre>
                     </>
                   )}
 
@@ -264,13 +348,16 @@ function App() {
                     💡 Example: {result.intervention.example}
                   </p>
 
-                  <hr className="my-6" style={{ borderColor: "var(--line)" }} />
-
-                  <h4 className="rl-display text-xl font-bold">Try this:</h4>
-                  <p className="mt-2">{result.intervention.question}</p>
-                  <p className="mt-2 text-sm" style={{ color: "var(--ink-soft)" }}>
-                    This question is now loaded in the form. Type your answer to continue.
-                  </p>
+                  {submittedMode !== "code" && (
+                    <>
+                      <hr className="my-6" style={{ borderColor: "var(--line)" }} />
+                      <h4 className="rl-display text-xl font-bold">Try this:</h4>
+                      <p className="mt-2">{result.intervention.question}</p>
+                      <p className="mt-2 text-sm" style={{ color: "var(--ink-soft)" }}>
+                        This question is now loaded in the form. Type your answer to continue.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
             </div>
