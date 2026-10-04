@@ -115,10 +115,10 @@ function App() {
         setAnswer("");
         if (isCodeSubmission) {
           setResult(data);
-          setFeedback(data.message ?? "The server confirmed your code is correct!");
+          setFeedback("Misconception cleared! The server confirmed your code is correct.");
         } else {
           setResult(null);
-          setFeedback("Your concepts are crystal clear!");
+          setFeedback("Misconception cleared! Your concepts are crystal clear.");
         }
         return;
       }
@@ -272,6 +272,24 @@ function App() {
 
             {/* response  */}
             <div className="space-y-6" aria-live="polite">
+              {feedback &&
+                (submittedMode !== "code" ||
+                  result?.is_correct === true ||
+                  result?.correct === true) && (
+                <div
+                  className="rl-card-flat p-6"
+                  style={{ borderColor: "var(--good)", background: "#effaf5", color: "var(--good)" }}
+                  role="status"
+                >
+                  <h3 className="rl-display text-xl font-bold">Misconception cleared!</h3>
+                  <p className="mt-2">
+                    {submittedMode === "code"
+                      ? "The server confirmed your code is correct."
+                      : "Your answer is correct. Your concepts are crystal clear."}
+                  </p>
+                </div>
+              )}
+
               {!result && !feedback && (
                 <div className="rl-card-flat p-8" style={{ borderStyle: "dashed" }}>
                   <h3 className="rl-display text-xl font-bold">Your diagnosis appears here</h3>
